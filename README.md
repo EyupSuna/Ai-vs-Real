@@ -36,16 +36,16 @@ Bilgisayarda yeni görseller bir sonraki oyunda devreye girer. Vercel'de GitHub'
 
 ## Vercel'de yayınlama
 
-Oyun sunucusuz çalışır: telefonlar her saniye durumu sorar, oylar ve skorlar Upstash Redis'te tutulur.
+Oyun sunucusuz çalışır: telefonlar her saniye durumu sorar, oylar ve skorlar Redis'te (Redis Cloud ya da Upstash) tutulur.
 
 1. Projeyi GitHub'a push et ve Vercel'de **Add New → Project** ile depoyu içe aktar. Framework Preset **Other** kalsın; diğer ayarlar `vercel.json`'dan gelir.
-2. **Storage** sekmesi → **Create Database / Marketplace** → **Upstash for Redis** → ücretsiz plan → projeye bağla. Bağlantı bilgileri ortam değişkeni olarak kendiliğinden eklenir.
+2. **Storage** sekmesi → **Create Database** → **Redis** (Redis Cloud, Free — 30 MB) ya da **Upstash for Redis** → projeye bağla. Redis Cloud'da *Custom Prefix* alanına `REDIS` yaz (`REDIS_URL` olur). Bağlantı bilgileri ortam değişkeni olarak kendiliğinden eklenir.
 3. **Deployments** sekmesinden son deploy'u **Redeploy** et. Veritabanı bağlantısı ancak yeni deploy'la devreye girer.
 
 Sonra dev ekran `https://<proje>.vercel.app/host`, katılımcı adresi `https://<proje>.vercel.app` olur.
 
 - Dev ekran sekmesi oyun boyunca açık kalmalı: süreyi dolduran ve cevabı açan odur.
-- Upstash ücretsiz planı (30 MB, saniyede 100 işlem) yeterli: oy ve sinyal başına tek işlem harcanır, 300 kişide bile tepe yük saniyede yaklaşık 60-90 işlemdir. Yoğunlukta reddedilen oy telefonda otomatik yeniden denenir.
+- Ücretsiz Redis planı (30 MB, saniyede 100 işlem) yeterli: oy ve sinyal başına tek işlem harcanır, 300 kişide bile tepe yük saniyede yaklaşık 60-90 işlemdir. Yoğunlukta reddedilen oy telefonda otomatik yeniden denenir.
 
 ## Dev ekran şifresi
 
