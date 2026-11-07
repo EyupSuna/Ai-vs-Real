@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "outputDirectory": "public",
+  "functions": {
+    "api/*.js": { "includeFiles": "images/**", "maxDuration": 10 }
+  },
+  "rewrites": [
+    { "source": "/host", "destination": "/host.html" },
+    { "source": "/img/:id", "destination": "/api/img?id=:id" }
+  ],
+  "headers": [
+    { "source": "/assets/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] },
+    { "source": "/host", "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }] }
+  ]
+}

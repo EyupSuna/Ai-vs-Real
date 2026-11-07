@@ -12,27 +12,42 @@ export const store = {
 let clockOffset = 0;
 export const serverNow = () => Date.now() + clockOffset;
 
-// hello: her (yeniden) bağlantıda ilk gönderilecek mesaj (ör. admin şifresi).
-export function connect(query, onMessage, onStatus, onFatal, hello) {
-  let ws;
-  let retry = 0;
-  const open = () => {
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${proto}//${location.host}/ws?${query}`);
-    ws.onopen = () => { retry = 0; if (hello) ws.send(JSON.stringify(hello)); onStatus(true); };
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.now) clockOffset = msg.now - Date.now();
-      onMessage(msg);
-    };
-    ws.onclose = (event) => {
-      if (event.code >= 4000) { if (onFatal) onFatal(event.code); return; }
-      onStatus(false);
-      setTimeout(open, Math.min(4000, 400 * 2 ** retry++));
-    };
+// Sunucuya istek. Yanıttaki `now`, yolculuk süresinin yarısı düzeltilerek saati eşitler.
+// Hata durumunda { status, error } döner, istisna fırlatmaz.
+export async function api(path, body) {
+  const sent = Date.now();
+  try {
+    const res = await fetch(path, body === undefined
+      ? { cache: 'no-store' }
+      : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store' });
+    const data = await res.json().catch(() => ({}));
+    if (typeof data.now === 'number') clockOffset = data.now + (Date.now() - sent) / 2 - Date.now();
+    return res.ok ? data : { status: res.status, error: data.error || 'Sunucu hatası' };
+  } catch {
+    return { status: 0, error: 'Bağlantı yok' };
+  }
+}
+
+// Ortak durum. Herkes aynı adresi sorar ki CDN tek yanıtı herkese dağıtsın.
+export const fetchState = async () => {
+  try {
+    const res = await fetch('/api/state');
+    return res.ok ? await res.json() : null;
+  } catch { return null; }
+};
+
+// Düzenli sorgu: fn bitince ms kadar bekler, art arda hata olursa yavaşlar.
+export function every(ms, fn) {
+  let fails = 0;
+  let stopped = false;
+  const loop = async () => {
+    if (stopped) return;
+    const ok = await fn();
+    fails = ok === false ? fails + 1 : 0;
+    setTimeout(loop, fails ? Math.min(4000, ms * 2 ** fails) : ms);
   };
-  open();
-  return { send: (msg) => { if (ws.readyState === 1) ws.send(JSON.stringify(msg)); return ws.readyState === 1; } };
+  loop();
+  return () => { stopped = true; };
 }
 
 // Logonun sol yarısı açık zeminde siyah, sağ yarısı koyu zeminde beyaz kalır.

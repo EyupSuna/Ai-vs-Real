@@ -1,4 +1,4 @@
-import { $, esc, store, connect, serverNow, splitLogo, ratioBar, captionBlock, brand, animateRatio, preload } from '/client.js';
+import { $, esc, store, api, fetchState, every, serverNow, splitLogo, ratioBar, captionBlock, brand, animateRatio, preload } from '/client.js';
 
 const app = $('#app');
 let token = store.get('csai.token');
@@ -7,35 +7,72 @@ if (!token) {
   store.set('csai.token', token);
 }
 
-let state = null;
+let pub = null; // herkese giden ortak durum
+let me = null; // { pid, name }, katılmadıysa null
+let meLoaded = false;
+let state = null; // ekranların kullandığı birleşik durum (pub + me)
 let view = '';
 let notice = '';
 let tickTimer = null;
+let lastKey = '';
+
+// Verilen oylar telefonda da saklanır: sayfa yenilense bile "Oyun alındı" kalır.
+const votes = (() => { try { return JSON.parse(store.get('csai.votes') || '{}'); } catch { return {}; } })();
+const voteKey = () => `${pub.gid}:${pub.index}`;
+function saveVote(choice) {
+  for (const k of Object.keys(votes)) if (!k.startsWith(`${pub.gid}:`)) delete votes[k];
+  votes[voteKey()] = choice;
+  store.set('csai.votes', JSON.stringify(votes));
+}
 
 const label = (answer) => (answer === 'real' ? 'Gerçek' : 'Yapay zekâ');
 
-const game = connect(`role=player&token=${token}`, onMessage, setOnline);
+// Kimlik + "hâlâ buradayım" sinyali; sunucu kaç saniyede bir istediğini söyler.
+let beat = 10000;
+async function heartbeat() {
+  const r = await api(`/api/me?token=${token}`);
+  if (r.error) return false;
+  if (r.beat) beat = r.beat;
+  if (meLoaded && me && !r.me) { notice = 'Takma adın sunucu tarafından kaldırıldı. Başka bir ad seçebilirsin.'; view = ''; }
+  me = r.me;
+  meLoaded = true;
+  if (me) store.set('csai.name', me.name);
+  update();
+  return true;
+}
+(function beatLoop() { heartbeat().finally(() => setTimeout(beatLoop, beat)); })();
 
-function onMessage(msg) {
-  if (msg.type === 'state') {
-    state = msg;
-    if (msg.me) store.set('csai.name', msg.me.name);
-    render();
-  } else if (msg.type === 'progress' && state) {
-    Object.assign(state, msg);
-    const note = $('[data-progress]');
-    if (note) note.textContent = progressText();
-    const lobbyCount = $('[data-lobby-count]');
-    if (lobbyCount) lobbyCount.textContent = `${msg.playerCount} kişi hazır`;
-  } else if (msg.type === 'joinError') {
-    const err = $('.err');
-    if (err) err.textContent = msg.text;
-    const button = $('.join-form button');
-    if (button) button.disabled = false;
-  } else if (msg.type === 'kicked') {
-    notice = 'Takma adın sunucu tarafından kaldırıldı. Başka bir ad seçebilirsin.';
-    view = '';
+every(1000, async () => {
+  const s = await fetchState();
+  setOnline(Boolean(s));
+  if (!s) return false;
+  pub = s;
+  update();
+  return true;
+});
+
+function update() {
+  if (!pub || !meLoaded) return;
+  const vote = me && (pub.phase === 'question' || pub.phase === 'reveal') ? votes[voteKey()] || null : null;
+  let score = 0, rank = 0;
+  if (me && pub.board) {
+    const i = pub.board.findIndex(([pid]) => pid === me.pid);
+    rank = i >= 0 ? i + 1 : pub.board.length + 1;
+    score = i >= 0 ? pub.board[i][1] : 0;
   }
+  state = { ...pub, me: me && { name: me.name, score, rank, vote } };
+  // Yalnızca sayaçlar değiştiyse ekranı baştan çizme (animasyonlar ve yazılan ad bozulmasın).
+  const key = `${pub.phase}|${pub.gid}|${pub.index}|${me ? me.pid : ''}|${vote || ''}`;
+  if (key === lastKey) return progress();
+  lastKey = key;
+  render();
+}
+
+function progress() {
+  const note = $('[data-progress]');
+  if (note) note.textContent = progressText();
+  const lobbyCount = $('[data-lobby-count]');
+  if (lobbyCount) lobbyCount.textContent = `${state.playerCount} kişi hazır`;
 }
 
 function setOnline(online) {
@@ -93,8 +130,14 @@ function renderJoin() {
     if (!name) { $('.err').textContent = 'Bir takma ad yaz.'; return; }
     notice = '';
     requestWakeLock();
-    if (game.send({ type: 'join', name })) $('.join-form button').disabled = true;
-    else $('.err').textContent = 'Bağlantı bekleniyor, tekrar dene.';
+    $('.join-form button').disabled = true;
+    api('/api/join', { token, name }).then((r) => {
+      if (r.me) { me = r.me; store.set('csai.name', me.name); update(); return; }
+      const err = $('.err');
+      if (err) err.textContent = r.status === 0 ? 'Bağlantı yok, tekrar dene.' : r.error;
+      const button = $('.join-form button');
+      if (button) button.disabled = false;
+    });
   });
 }
 
@@ -131,9 +174,17 @@ function renderQuestion() {
       <button class="vote ai ${vote === 'ai' ? 'chosen' : ''}" data-v="ai" type="button">Yapay<small>${vote === 'ai' ? 'Senin oyun' : ''}</small></button>
     </div>
   </main>`;
-  app.querySelectorAll('.vote').forEach((btn) => btn.addEventListener('click', () => {
-    if (state.me.vote) return;
-    game.send({ type: 'vote', choice: btn.dataset.v });
+  let sending = false;
+  app.querySelectorAll('.vote').forEach((btn) => btn.addEventListener('click', async () => {
+    if (state.me.vote || sending) return;
+    sending = true;
+    btn.classList.add('chosen');
+    const { gid, index } = pub;
+    const r = await api('/api/vote', { token, choice: btn.dataset.v, gid, index });
+    sending = false;
+    if (r.ok && pub.gid === gid && pub.index === index) { saveVote(r.choice); update(); return; }
+    btn.classList.remove('chosen');
+    if (r.unknown) { me = null; update(); }
   }));
   app.querySelectorAll('.zoom, .zoom-chip').forEach((btn) => btn.addEventListener('click', openLightbox));
   startTick();

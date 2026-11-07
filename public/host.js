@@ -1,4 +1,4 @@
-import { $, esc, connect, serverNow, splitLogo, ratioBar, captionBlock, brand, animateRatio, preload } from '/client.js';
+import { $, esc, api, serverNow, splitLogo, ratioBar, captionBlock, brand, animateRatio, preload } from '/client.js';
 
 const app = $('#app');
 const controls = $('#controls');
@@ -8,7 +8,9 @@ let welcome = null;
 let tickTimer = null;
 let resetArmed = false;
 let toastTimer = null;
-let game = { send: () => false };
+let password = '';
+let lastKey = '';
+let polling = false;
 
 // Şifre sekme kapanana kadar hatırlanır; yenilemede tekrar sorulmaz.
 const PASS_KEY = 'csai.adminPass';
@@ -39,27 +41,51 @@ function showLogin(error) {
   });
 }
 
-function login(pass) {
-  let opened = false;
-  game = connect('role=host', (msg) => {
-    if (!opened) { opened = true; try { sessionStorage.setItem(PASS_KEY, pass); } catch { /* gizli sekme */ } }
-    onMessage(msg);
-  }, () => {}, () => {
-    try { sessionStorage.removeItem(PASS_KEY); } catch { /* gizli sekme */ }
-    state = null;
-    clearInterval(tickTimer);
-    showLogin('Şifre yanlış.');
-  }, { type: 'auth', password: pass });
+async function login(pass) {
+  password = pass;
+  const r = await call({});
+  if (r.status === 401 || r.status === 503) return fail(r.error);
+  if (r.error && !state) return showLogin(r.status === 0 ? 'Sunucuya ulaşılamadı, tekrar dene.' : r.error);
+  try { sessionStorage.setItem(PASS_KEY, pass); } catch { /* gizli sekme */ }
+  if (!polling) { polling = true; poll(); }
 }
 
-function onMessage(msg) {
-  if (msg.type === 'state') { state = msg; render(); }
-  else if (msg.type === 'welcome') { welcome = msg; if (state) render(); }
-  else if (msg.type === 'progress' && state) {
-    Object.assign(state, msg);
-    if (state.phase === 'lobby') renderPlayers();
-    if (state.phase === 'question') renderVotes();
-  } else if (msg.type === 'toast') toast(msg.text);
+function fail(error) {
+  try { sessionStorage.removeItem(PASS_KEY); } catch { /* gizli sekme */ }
+  state = null;
+  polling = false;
+  lastKey = '';
+  clearInterval(tickTimer);
+  showLogin(error);
+}
+
+// Dev ekran oyunu ilerleten taraftır: açık kaldığı sürece süre dolunca ya da herkes oylayınca cevap açılır.
+async function poll() {
+  if (!polling) return;
+  const r = await call({});
+  setTimeout(poll, r.error ? 2000 : 800);
+}
+
+// Her çağrı güncel durumu döndürür; eylem (ilerle, sıfırla, at) aynı istekle gider.
+async function call(extra) {
+  const r = await api('/api/host', { password, qr: !welcome, ...extra });
+  if (r.status === 401 || r.status === 503) { if (state) fail(r.error); return r; }
+  if (r.error) { if (state) toast('Sunucuya ulaşılamıyor, yeniden deneniyor…'); return r; }
+  if (r.welcome) welcome = r.welcome;
+  if (r.toast) toast(r.toast);
+  onState(r.state);
+  return r;
+}
+
+const send = (msg) => call({ action: msg.type, id: msg.id, from: state && { phase: state.phase, index: state.index } });
+
+function onState(next) {
+  state = next;
+  // Aynı adımdaysak yalnızca sayaçları güncelle; görsel ve animasyonlar yeniden çizilmesin.
+  const key = `${state.phase}|${state.gid}|${state.index}|${welcome ? 1 : 0}`;
+  if (key !== lastKey) { lastKey = key; render(); return; }
+  if (state.phase === 'lobby') renderPlayers();
+  if (state.phase === 'question') renderVotes();
 }
 
 function toast(text) {
@@ -212,10 +238,10 @@ function renderControls() {
 
 controls.addEventListener('click', (event) => {
   const act = event.target.closest('[data-act]')?.dataset.act;
-  if (act === 'advance') game.send({ type: 'advance' });
+  if (act === 'advance') send({ type: 'advance' });
   if (act === 'fullscreen') toggleFullscreen();
   if (act === 'reset') {
-    if (resetArmed) { resetArmed = false; game.send({ type: 'reset' }); return; }
+    if (resetArmed) { resetArmed = false; send({ type: 'reset' }); return; }
     resetArmed = true;
     renderControls();
     setTimeout(() => { resetArmed = false; if (state) renderControls(); }, 4000);
@@ -224,7 +250,7 @@ controls.addEventListener('click', (event) => {
 
 app.addEventListener('click', (event) => {
   const id = event.target.closest('[data-kick]')?.dataset.kick;
-  if (id) game.send({ type: 'kick', id });
+  if (id) send({ type: 'kick', id });
 });
 
 function toggleFullscreen() {
@@ -240,7 +266,7 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     if (event.repeat || Date.now() - lastAdvance < 700) return;
     lastAdvance = Date.now();
-    game.send({ type: 'advance' });
+    send({ type: 'advance' });
   } else if (event.key === 'f' || event.key === 'F') toggleFullscreen();
 });
 

@@ -11,7 +11,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "qrcode": "^1.5.4",
-    "ws": "^8.22.1"
+    "@upstash/redis": "^1.41.0",
+    "qrcode": "^1.5.4"
   }
 }

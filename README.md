@@ -28,33 +28,47 @@ Alaska'daki bir buzulun üstten görünümü...      <- açıklama
 Foto: Ad Soyad · CC BY-SA 4.0                   <- kaynak (isteğe bağlı, "Foto:" ile başlar)
 ```
 
-Yeni görseller bir sonraki oyunda devreye girer, sunucuyu yeniden başlatmak gerekmez.
+Bilgisayarda yeni görseller bir sonraki oyunda devreye girer. Vercel'de GitHub'a push edip yeni deploy'u beklemek gerekir.
 
 - Görselleri en fazla 1280-1600 px yap. Salondaki herkes aynı anda indirecek.
 - Metadata'yı temizle. Birçok üretim aracı EXIF'e kendi adını yazar ve meraklı biri bunu okuyabilir.
 - Başlangıç setinin kaynak ve lisansları `images/KAYNAKLAR.md` dosyasında. CC BY-SA ve GFDL lisanslı görselleri yayımlıyorsan bu atıflar kalmalı.
 
+## Vercel'de yayınlama
+
+Oyun sunucusuz çalışır: telefonlar her saniye durumu sorar, oylar ve skorlar Upstash Redis'te tutulur.
+
+1. Projeyi GitHub'a push et ve Vercel'de **Add New → Project** ile depoyu içe aktar. Framework Preset **Other** kalsın; diğer ayarlar `vercel.json`'dan gelir.
+2. **Storage** sekmesi → **Create Database / Marketplace** → **Upstash for Redis** → ücretsiz plan → projeye bağla. Bağlantı bilgileri ortam değişkeni olarak kendiliğinden eklenir.
+3. **Settings → Environment Variables** bölümüne `ADMIN_PASSWORD` ekle (dev ekran şifresi).
+4. **Deployments** sekmesinden son deploy'u **Redeploy** et. Ortam değişkenleri ancak yeni deploy'la devreye girer.
+
+Sonra dev ekran `https://<proje>.vercel.app/host`, katılımcı adresi `https://<proje>.vercel.app` olur.
+
+- Dev ekran sekmesi oyun boyunca açık kalmalı: süreyi dolduran ve cevabı açan odur.
+- Upstash'in ücretsiz planı aylık sınırlıdır. 300 kişilik, 25 görsellik bir oyun yaklaşık 50-100 bin komut harcar; prova ve etkinlik için yeter.
+
 ## Ayarlar (ortam değişkenleri)
 
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
-| `PORT` | 3000 | Sunucu portu |
-| `ADMIN_PASSWORD` | her açılışta rastgele (konsola yazılır) | Dev ekran şifresi. Yayında mutlaka kendin belirle |
+| `ADMIN_PASSWORD` | bilgisayarda rastgele (konsola yazılır) | Dev ekran şifresi. Vercel'de zorunlu |
 | `ROUND_SECONDS` | 20 | Tur süresi |
 | `QUESTION_COUNT` | hepsi | Kaç görsel sorulacak |
 | `PUBLIC_URL` | otomatik | QR kodun gideceği adres |
+| `ONLINE_SECONDS` | 30 | Bu süre ses vermeyen telefon "ayrıldı" sayılır, beklenmez |
+| `PORT` | 3000 | Yalnızca bilgisayarda: sunucu portu |
 
-## Herkes nasıl bağlanacak?
+## Bilgisayardan oynatma (Vercel'siz)
 
-QR adresi, dev ekranı hangi adresten açtıysan ona göre otomatik oluşur.
+`npm start` aynı oyunu tek sunucuda çalıştırır; Redis gerekmez, durum bellekte tutulur.
 
-- **Aynı Wi-Fi:** `npm start` yeterli. Ancak kampüs ve etkinlik ağları cihazların birbirini görmesini çoğu zaman engeller, önceden telefonla dene.
+- **Aynı Wi-Fi:** Kampüs ve etkinlik ağları cihazların birbirini görmesini çoğu zaman engeller, önceden telefonla dene.
 - **Tünel:** `cloudflared tunnel --url http://localhost:3000` herkese açık bir https adresi verir. Dev ekranı bu adresten aç.
-- **Bulut (Render, Railway vb.):** GitHub deposunu bağla. Build komutu `npm install`, başlatma komutu `npm start`. `ADMIN_PASSWORD` değişkenini tanımla. WebSocket destekleyen tek bir sunucu örneği kullan.
-- **Vercel / Netlify çalışmaz:** Sunucusuz (serverless) oldukları için sürekli açık WebSocket bağlantısı ve bellekteki oyun durumu tutulamaz.
 
 ## Bilinmesi gerekenler
 
-- Oyun durumu bellektedir. Sunucu yeniden başlarsa skorlar sıfırlanır, oyun sırasında dağıtım yapma.
-- Bağlantısı kopan veya telefonu kilitlenen kişi beklenmez, geri geldiğinde kaldığı yerden devam eder.
+- Cevap, herkes oyladıktan en geç 1-2 saniye sonra açılır (telefonlar saniyede bir sorar).
+- Telefonu kilitlenen kişi en geç `ONLINE_SECONDS` sonra beklenmez; geri geldiğinde kaldığı yerden devam eder.
 - Sıralamada eşitlik, doğru cevaplardaki toplam süreyle bozulur.
+- Oyun sırasında yeni deploy yapma; açık sayfalar eski koda bakar.
