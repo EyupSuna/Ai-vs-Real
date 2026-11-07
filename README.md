@@ -45,7 +45,7 @@ Oyun sunucusuz çalışır: telefonlar her saniye durumu sorar, oylar ve skorlar
 Sonra dev ekran `https://<proje>.vercel.app/host`, katılımcı adresi `https://<proje>.vercel.app` olur.
 
 - Dev ekran sekmesi oyun boyunca açık kalmalı: süreyi dolduran ve cevabı açan odur.
-- Upstash'in ücretsiz planı aylık sınırlıdır. 300 kişilik, 25 görsellik bir oyun yaklaşık 50-100 bin komut harcar; prova ve etkinlik için yeter.
+- Upstash ücretsiz planı (30 MB, saniyede 100 işlem) yeterli: oy ve sinyal başına tek işlem harcanır, 300 kişide bile tepe yük saniyede yaklaşık 60-90 işlemdir. Yoğunlukta reddedilen oy telefonda otomatik yeniden denenir.
 
 ## Dev ekran şifresi
 
@@ -64,7 +64,7 @@ node -e "console.log(require('crypto').createHash('sha256').update('YENI_SIFRE')
 | `ROUND_SECONDS` | 20 | Tur süresi |
 | `QUESTION_COUNT` | hepsi | Kaç görsel sorulacak |
 | `PUBLIC_URL` | otomatik | QR kodun gideceği adres |
-| `ONLINE_SECONDS` | 30 | Bu süre ses vermeyen telefon "ayrıldı" sayılır, beklenmez |
+| `ONLINE_SECONDS` | 45 | Bu süre ses vermeyen telefon "ayrıldı" sayılır, beklenmez |
 | `PORT` | 3000 | Yalnızca bilgisayarda: sunucu portu |
 
 ## Bilgisayardan oynatma (Vercel'siz)

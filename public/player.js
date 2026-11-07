@@ -27,20 +27,32 @@ function saveVote(choice) {
 
 const label = (answer) => (answer === 'real' ? 'Gerçek' : 'Yapay zekâ');
 
-// Kimlik + "hâlâ buradayım" sinyali; sunucu kaç saniyede bir istediğini söyler.
-let beat = 10000;
+// Kimlik sayfa açılışında bir kez okunur; sonra "hâlâ buradayım" sinyali gider (sunucu aralığı söyler).
+let beat = 15000;
+let meSince = 0;
+function setMe(next) {
+  me = next;
+  meSince = Date.now();
+  if (me) store.set('csai.name', me.name);
+}
 async function heartbeat() {
-  const r = await api(`/api/me?token=${token}`);
+  const r = await api(`/api/me?token=${token}${meLoaded ? '' : '&full=1'}`);
   if (r.error) return false;
   if (r.beat) beat = r.beat;
-  if (meLoaded && me && !r.me) { notice = 'Takma adın sunucu tarafından kaldırıldı. Başka bir ad seçebilirsin.'; view = ''; }
-  me = r.me;
-  meLoaded = true;
-  if (me) store.set('csai.name', me.name);
-  update();
+  if (!meLoaded) { setMe(r.me); meLoaded = true; update(); }
   return true;
 }
-(function beatLoop() { heartbeat().finally(() => setTimeout(beatLoop, beat)); })();
+(function beatLoop() { heartbeat().finally(() => setTimeout(beatLoop, meLoaded ? beat : 2000)); })();
+
+// Sunucu kişiyi attıysa kimliği ortak listede (lobi) ya da sıralamada artık yoktur.
+// Yeni katılan biri önbellekteki listede birkaç saniye görünmeyebilir; o yüzden bekleme payı var.
+function checkKicked() {
+  const list = pub.pids || (pub.board && pub.board.map(([pid]) => pid));
+  if (!me || !list || Date.now() - meSince < 4000 || list.includes(me.pid)) return;
+  setMe(null);
+  notice = 'Takma adın sunucu tarafından kaldırıldı. Başka bir ad seçebilirsin.';
+  view = '';
+}
 
 every(1000, async () => {
   const s = await fetchState();
@@ -53,6 +65,7 @@ every(1000, async () => {
 
 function update() {
   if (!pub || !meLoaded) return;
+  checkKicked();
   const vote = me && (pub.phase === 'question' || pub.phase === 'reveal') ? votes[voteKey()] || null : null;
   let score = 0, rank = 0;
   if (me && pub.board) {
@@ -132,7 +145,7 @@ function renderJoin() {
     requestWakeLock();
     $('.join-form button').disabled = true;
     api('/api/join', { token, name }).then((r) => {
-      if (r.me) { me = r.me; store.set('csai.name', me.name); update(); return; }
+      if (r.me) { setMe(r.me); update(); return; }
       const err = $('.err');
       if (err) err.textContent = r.status === 0 ? 'Bağlantı yok, tekrar dene.' : r.error;
       const button = $('.join-form button');
@@ -180,11 +193,16 @@ function renderQuestion() {
     sending = true;
     btn.classList.add('chosen');
     const { gid, index } = pub;
-    const r = await api('/api/vote', { token, choice: btn.dataset.v, gid, index });
+    const body = { token, choice: btn.dataset.v, gid, index };
+    let r = await api('/api/vote', body);
+    // Herkes aynı saniyede oylarken sunucu yoğun olabilir: oyu kaybetmemek için birkaç kez daha dene.
+    for (let i = 0; i < 3 && (r.status === 0 || r.status >= 500); i++) {
+      await new Promise((ok) => setTimeout(ok, 400 + Math.random() * 600));
+      r = await api('/api/vote', body);
+    }
     sending = false;
     if (r.ok && pub.gid === gid && pub.index === index) { saveVote(r.choice); update(); return; }
     btn.classList.remove('chosen');
-    if (r.unknown) { me = null; update(); }
   }));
   app.querySelectorAll('.zoom, .zoom-chip').forEach((btn) => btn.addEventListener('click', openLightbox));
   startTick();
