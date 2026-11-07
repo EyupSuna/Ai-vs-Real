@@ -1,0 +1,17 @@
+{
+  "name": "ekozeka2026-gercek-mi-yapay-mi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EkoZeka2026 canlı oyunu: iklim ve çevre görselleri gerçek mi, yapay zekâ mı?",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "ws": "^8.22.1"
+  }
+}
