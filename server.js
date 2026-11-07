@@ -5,7 +5,6 @@ const http = require('http');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const crypto = require('crypto');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -20,8 +19,6 @@ function lanAddress() {
 
 // Dev ekran localhost'tan açılınca QR, telefonların erişebileceği ağ adresini göstersin.
 process.env.LAN_URL = `http://${lanAddress()}:${PORT}`;
-const generated = !(process.env.ADMIN_PASSWORD || process.env.HOST_KEY);
-if (generated) process.env.ADMIN_PASSWORD = crypto.randomBytes(4).toString('hex');
 
 const { handlers, storeKind } = require('./lib/game');
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -59,6 +56,5 @@ server.listen(PORT, () => {
   const base = process.env.PUBLIC_URL || process.env.LAN_URL;
   console.log(`\n  EkoZeka2026 — Gerçek mi, Yapay mı?   (depo: ${storeKind === 'redis' ? 'Upstash Redis' : 'bellek'})\n`);
   console.log(`  Dev ekran : ${base}/host`);
-  console.log(`  Şifre     : ${generated ? `${process.env.ADMIN_PASSWORD}  (rastgele üretildi; ADMIN_PASSWORD ile sabitle)` : '(ADMIN_PASSWORD ortam değişkeni)'}`);
   console.log(`  Oyuncular : ${base}\n`);
 });

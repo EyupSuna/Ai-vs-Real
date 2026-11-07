@@ -12,7 +12,7 @@ npm start
 
 Konsol iki adres yazar:
 
-- **Dev ekran:** `/host` Bunu projeksiyondaki bilgisayarda aç ve şifreyi gir (`ADMIN_PASSWORD`). Şifre o sekme kapanana kadar hatırlanır.
+- **Dev ekran:** `/host` Bunu projeksiyondaki bilgisayarda aç ve şifreyi gir. Şifre o sekme kapanana kadar hatırlanır.
 - **Oyuncular:** Dev ekrandaki QR kod bu adrese gider.
 
 Dev ekran kısayolları: `Boşluk` bir sonraki adım, `F` tam ekran. Lobide bir takma ada tıklamak onu oyundan çıkarır.
@@ -40,19 +40,27 @@ Oyun sunucusuz çalışır: telefonlar her saniye durumu sorar, oylar ve skorlar
 
 1. Projeyi GitHub'a push et ve Vercel'de **Add New → Project** ile depoyu içe aktar. Framework Preset **Other** kalsın; diğer ayarlar `vercel.json`'dan gelir.
 2. **Storage** sekmesi → **Create Database / Marketplace** → **Upstash for Redis** → ücretsiz plan → projeye bağla. Bağlantı bilgileri ortam değişkeni olarak kendiliğinden eklenir.
-3. **Settings → Environment Variables** bölümüne `ADMIN_PASSWORD` ekle (dev ekran şifresi).
-4. **Deployments** sekmesinden son deploy'u **Redeploy** et. Ortam değişkenleri ancak yeni deploy'la devreye girer.
+3. **Deployments** sekmesinden son deploy'u **Redeploy** et. Veritabanı bağlantısı ancak yeni deploy'la devreye girer.
 
 Sonra dev ekran `https://<proje>.vercel.app/host`, katılımcı adresi `https://<proje>.vercel.app` olur.
 
 - Dev ekran sekmesi oyun boyunca açık kalmalı: süreyi dolduran ve cevabı açan odur.
 - Upstash'in ücretsiz planı aylık sınırlıdır. 300 kişilik, 25 görsellik bir oyun yaklaşık 50-100 bin komut harcar; prova ve etkinlik için yeter.
 
+## Dev ekran şifresi
+
+Şifre koda gömülüdür (`lib/game.js` içindeki `ADMIN_HASH`). Depo herkese açık olduğu için şifrenin kendisi değil SHA-256 özeti durur.
+Değiştirmek için yeni şifrenin özetini al ve `ADMIN_HASH`'e yapıştır:
+
+```
+node -e "console.log(require('crypto').createHash('sha256').update('YENI_SIFRE').digest('hex'))"
+```
+
 ## Ayarlar (ortam değişkenleri)
 
 | Değişken | Varsayılan | Açıklama |
 |---|---|---|
-| `ADMIN_PASSWORD` | bilgisayarda rastgele (konsola yazılır) | Dev ekran şifresi. Vercel'de zorunlu |
+| `ADMIN_PASSWORD` | yok | Verilirse koda gömülü şifrenin yerine geçer (isteğe bağlı) |
 | `ROUND_SECONDS` | 20 | Tur süresi |
 | `QUESTION_COUNT` | hepsi | Kaç görsel sorulacak |
 | `PUBLIC_URL` | otomatik | QR kodun gideceği adres |
